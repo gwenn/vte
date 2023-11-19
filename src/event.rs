@@ -13,6 +13,7 @@ struct Performer<'h, H: Handler> {
     /// https://en.wikipedia.org/wiki/C0_and_C1_control_codes#C1_control_codes_for_general_use
     /// https://en.wikipedia.org/wiki/ISO/IEC_2022#Shift_functions
     ss3: bool,
+    csi_bracket: bool,
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
@@ -20,6 +21,9 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
         if self.ss3 {
             self.ss3 = false;
             self.handler.ss3(c);
+        } else if self.csi_bracket {
+            self.csi_bracket = false;
+            self.csi_dispatch(&Params::default(), &[], false, c);
         } else if c == '\x7F' {
             self.handler.execute(c as u8);
         } else {
@@ -32,7 +36,11 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, c: char) {
-        self.handler.csi_dispatch(params, intermediates, ignore, c);
+        if c == '[' /*&& params.is_empty()*/&& intermediates.is_empty() && !ignore {
+            self.csi_bracket = true;
+        } else {
+            self.handler.csi_dispatch(params, intermediates, ignore, c);
+        }
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
@@ -47,10 +55,11 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Params, Parser};
 
     fn parse<'h, H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x = Performer { handler: h, ss3: false };
-        let mut p = crate::Parser::new();
+        let mut x = Performer { handler: h, ss3: false, csi_bracket: false };
+        let mut p = Parser::new();
         for b in bytes {
             p.advance(&mut x, *b);
         }
@@ -59,49 +68,49 @@ mod tests {
 
     #[test]
     fn test_ss3() {
-        struct H {
-            c: char,
-        }
+        struct H(char);
         impl Handler for H {
             fn ss3(&mut self, c: char) {
-                self.c = c;
+                self.0 = c;
             }
         }
-        let mut h = H { c: '\0' };
-        let bytes = &[0x1b, b'O', b'A'];
-        parse(&mut h, bytes);
-        assert_eq!('A', h.c);
+        let mut h = H('\0');
+        parse(&mut h, &[0x1b, b'O', b'A']);
+        assert_eq!('A', h.0);
     }
 
     #[test]
     fn test_backspace() {
-        struct H {
-            b: u8,
-        }
+        struct H(u8);
         impl Handler for H {
             fn execute(&mut self, b: u8) {
-                self.b = b;
+                self.0 = b;
             }
         }
-        let mut h = H { b: 0 };
-        let bytes = &[0x7f];
-        parse(&mut h, bytes);
-        assert_eq!(0x7f, h.b);
+        let mut h = H(0);
+        parse(&mut h, &[0x7f]);
+        assert_eq!(0x7f, h.0);
     }
 
     #[test]
-    fn test_backspace() {
-        struct H {
-            b: u8,
-        }
+    fn test_csi_bracket() {
+        struct H(char);
         impl Handler for H {
-            fn execute(&mut self, b: u8) {
-                self.b = b;
+            fn csi_dispatch(
+                &mut self,
+                params: &Params,
+                intermediates: &[u8],
+                ignore: bool,
+                c: char,
+            ) {
+                assert!(params.is_empty());
+                assert!(intermediates.is_empty());
+                assert!(!ignore);
+                self.0 = c;
             }
         }
-        let mut h = H { b: 0 };
-        let bytes = &[0x7f];
-        parse(&mut h, bytes);
-        assert_eq!(0x7f, h.b);
+        let mut h = H('\0');
+        parse(&mut h, &[0x1b, b'[', b'[', b'A']);
+        assert_eq!('A', h.0);
     }
 }
