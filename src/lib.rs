@@ -46,6 +46,7 @@ mod table;
 
 #[cfg(feature = "ansi")]
 pub mod ansi;
+pub mod event;
 pub use params::{Params, ParamsIter};
 
 use definitions::{unpack, Action, State};
@@ -364,6 +365,15 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             Action::BeginUtf8 => self.process_utf8(performer, byte),
             Action::Ignore => (),
             Action::None => (),
+        }
+    }
+
+    /// Returns if the state machine is in the ground state,
+    /// i.e. there is no pending state held by the state machine.
+    pub fn is_ground(&self) -> bool {
+        match self.state {
+            State::Ground => true,
+            _ => false,
         }
     }
 }
