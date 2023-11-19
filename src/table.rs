@@ -30,10 +30,10 @@ generate_state_changes!(state_changes, {
     },
 
     Escape {
-        0x00..=0x17 => (Anywhere, Execute),
+        0x00..=0x17 => (Ground, EscDispatch), // Alt-Enter ([0x1b, 0x1a])
         0x19        => (Anywhere, Execute),
         0x1c..=0x1f => (Anywhere, Execute),
-        0x7f        => (Anywhere, Ignore),
+        0x7f        => (Ground, EscDispatch), // Alt-Backspace on Mac
         0x20..=0x2f => (EscapeIntermediate, Collect),
         0x30..=0x4f => (Ground, EscDispatch),
         0x51..=0x57 => (Ground, EscDispatch),

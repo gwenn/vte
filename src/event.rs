@@ -113,4 +113,49 @@ mod tests {
         parse(&mut h, &[0x1b, b'[', b'[', b'A']);
         assert_eq!('A', h.0);
     }
+
+    #[test]
+    fn test_alt_enter() {
+        struct H(u8);
+        impl Handler for H {
+            fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
+                assert!(intermediates.is_empty());
+                assert!(!ignore);
+                self.0 = b;
+            }
+        }
+        let mut h = H(0);
+        parse(&mut h, &[0x1b, 0x0d]);
+        assert_eq!(0x0d, h.0);
+    }
+
+    #[test]
+    fn test_alt_backspace() {
+        struct H(u8);
+        impl Handler for H {
+            fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
+                assert!(intermediates.is_empty());
+                assert!(!ignore);
+                self.0 = b;
+            }
+        }
+        let mut h = H(0);
+        parse(&mut h, &[0x1b, 0x7f]);
+        assert_eq!(0x7f, h.0);
+    }
+
+    #[test]
+    fn test_shift_tab() {
+        struct H(u8);
+        impl Handler for H {
+            fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
+                assert!(intermediates.is_empty());
+                assert!(!ignore);
+                self.0 = b;
+            }
+        }
+        let mut h = H(0);
+        parse(&mut h, &[0x1b, 0x09]);
+        assert_eq!(0x09, h.0);
+    }
 }
