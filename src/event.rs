@@ -1,13 +1,19 @@
+/// Reading user input
 use crate::{Params, Perform};
 
+/// User input handler
 trait Handler {
     fn ss3(&mut self, _c: char) {}
+    /// printable character pressed
     fn print(&mut self, _c: char) {}
+    /// control character pressed (Tab / Ctrl-I, Enter / Ctrl-M, Backspace / Ctrl-H, ...)
     fn execute(&mut self, _b: u8) {}
+    /// Alt + character pressed, BackTab / Shift-Tab
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _b: u8) {}
     fn csi_dispatch(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _c: char) {}
 }
 
+/// Adapter from `crate::Perform` to `Handler`
 struct Performer<'h, H: Handler> {
     handler: &'h mut H,
     /// https://en.wikipedia.org/wiki/C0_and_C1_control_codes#C1_control_codes_for_general_use
@@ -75,6 +81,7 @@ mod tests {
             }
         }
         let mut h = H('\0');
+        // F1 on Mac / Windows terminal with ENABLE_VIRTUAL_TERMINAL_INPUT
         parse(&mut h, &[0x1b, b'O', b'A']);
         assert_eq!('A', h.0);
     }
@@ -88,6 +95,7 @@ mod tests {
             }
         }
         let mut h = H(0);
+        // Mac / Windows terminal
         parse(&mut h, &[0x7f]);
         assert_eq!(0x7f, h.0);
     }
@@ -110,6 +118,7 @@ mod tests {
             }
         }
         let mut h = H('\0');
+        // F1 on Linux console
         parse(&mut h, &[0x1b, b'[', b'[', b'A']);
         assert_eq!('A', h.0);
     }
@@ -125,6 +134,7 @@ mod tests {
             }
         }
         let mut h = H(0);
+        // Mac / Linux / Windows
         parse(&mut h, &[0x1b, 0x0d]);
         assert_eq!(0x0d, h.0);
     }
@@ -155,6 +165,7 @@ mod tests {
             }
         }
         let mut h = H(0);
+        // Mac / Linux console
         parse(&mut h, &[0x1b, 0x09]);
         assert_eq!(0x09, h.0);
     }
