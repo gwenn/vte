@@ -2,11 +2,12 @@
 use crate::{Params, Perform};
 
 /// User input handler
-trait Handler {
+pub trait Handler {
     fn ss3(&mut self, _c: char) {}
     /// printable character pressed
     fn print(&mut self, _c: char) {}
-    /// control character pressed (Tab / Ctrl-I, Enter / Ctrl-M, Backspace / Ctrl-H, ...)
+    /// control character pressed (Tab / Ctrl-I, Enter / Ctrl-M, Backspace /
+    /// Ctrl-H, ...)
     fn execute(&mut self, _b: u8) {}
     /// Alt + character pressed, BackTab / Shift-Tab
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _b: u8) {}
@@ -20,6 +21,10 @@ struct Performer<'h, H: Handler> {
     /// https://en.wikipedia.org/wiki/ISO/IEC_2022#Shift_functions
     ss3: bool,
     csi_bracket: bool,
+}
+
+pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
+    Performer { handler: h, ss3: false, csi_bracket: false }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
@@ -64,11 +69,9 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<'h, H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x = Performer { handler: h, ss3: false, csi_bracket: false };
+        let mut x = new(h);
         let mut p = Parser::new();
-        for b in bytes {
-            p.advance(&mut x, *b);
-        }
+        p.advance(&mut x, bytes);
         assert!(p.is_ground());
     }
 
@@ -82,7 +85,7 @@ mod tests {
         }
         let mut h = H('\0');
         // F1 on Mac / Windows terminal with ENABLE_VIRTUAL_TERMINAL_INPUT
-        parse(&mut h, &[0x1b, b'O', b'A']);
+        parse(&mut h, &[0x1B, b'O', b'A']);
         assert_eq!('A', h.0);
     }
 
@@ -96,8 +99,8 @@ mod tests {
         }
         let mut h = H(0);
         // Mac / Windows terminal
-        parse(&mut h, &[0x7f]);
-        assert_eq!(0x7f, h.0);
+        parse(&mut h, &[0x7F]);
+        assert_eq!(0x7F, h.0);
     }
 
     #[test]
@@ -119,7 +122,7 @@ mod tests {
         }
         let mut h = H('\0');
         // F1 on Linux console
-        parse(&mut h, &[0x1b, b'[', b'[', b'A']);
+        parse(&mut h, &[0x1B, b'[', b'[', b'A']);
         assert_eq!('A', h.0);
     }
 
@@ -135,8 +138,8 @@ mod tests {
         }
         let mut h = H(0);
         // Mac / Linux / Windows
-        parse(&mut h, &[0x1b, 0x0d]);
-        assert_eq!(0x0d, h.0);
+        parse(&mut h, &[0x1B, 0x0D]);
+        assert_eq!(0x0D, h.0);
     }
 
     #[test]
@@ -150,8 +153,8 @@ mod tests {
             }
         }
         let mut h = H(0);
-        parse(&mut h, &[0x1b, 0x7f]);
-        assert_eq!(0x7f, h.0);
+        parse(&mut h, &[0x1B, 0x7F]);
+        assert_eq!(0x7F, h.0);
     }
 
     #[test]
@@ -166,7 +169,7 @@ mod tests {
         }
         let mut h = H(0);
         // Mac / Linux console
-        parse(&mut h, &[0x1b, 0x09]);
+        parse(&mut h, &[0x1B, 0x09]);
         assert_eq!(0x09, h.0);
     }
 }

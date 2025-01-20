@@ -340,7 +340,11 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
     #[inline(always)]
     fn advance_esc<P: Perform>(&mut self, performer: &mut P, byte: u8) {
         match byte {
-            0x00..=0x17 | 0x19 | 0x1C..=0x1F => performer.execute(byte),
+            0x00..=0x17 | 0x7F => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, byte);
+                self.state = State::Ground
+            },
+            0x19 | 0x1C..=0x1F => performer.execute(byte),
             0x20..=0x2F => {
                 self.action_collect(byte);
                 self.state = State::EscapeIntermediate
