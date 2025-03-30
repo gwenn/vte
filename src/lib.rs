@@ -39,6 +39,7 @@ mod params;
 
 #[cfg(feature = "ansi")]
 pub mod ansi;
+#[cfg(feature = "event")]
 pub mod event;
 pub use params::{Params, ParamsIter};
 

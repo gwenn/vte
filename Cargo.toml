@@ -16,6 +16,7 @@ rust-version = "1.62.1"
 [features]
 ansi = ["log", "cursor-icon", "bitflags"]
 default = ["std"]
+event = []
 std = ["memchr/std"]
 serde = ["dep:serde"]
 
