@@ -3,7 +3,7 @@ use crate::{Params, Perform};
 
 /// User input handler
 pub trait Handler {
-    fn ss3(&mut self, _c: char) {}
+    fn ss3_dispatch(&mut self, _param: u16, _c: char) {}
     /// printable character pressed
     fn print(&mut self, _c: char) {}
     /// control character pressed (Tab / Ctrl-I, Enter / Ctrl-M, Backspace /
@@ -32,8 +32,8 @@ fn show(bs: &[u8]) -> String {
 }
 #[cfg(feature = "log")]
 impl Handler for Log {
-    fn ss3(&mut self, c: char) {
-        log::info!(target: "vte", "[ss3] c={c}");
+    fn ss3_dispatch(&mut self, param: u16, c: char) {
+        log::info!(target: "vte", "[ss3] param={param} c={c}");
     }
 
     fn print(&mut self, c: char) {
@@ -72,23 +72,17 @@ impl Handler for Log {
 /// Adapter from `crate::Perform` to `Handler`
 struct Performer<'h, H: Handler> {
     handler: &'h mut H,
-    /// https://en.wikipedia.org/wiki/C0_and_C1_control_codes#C1_control_codes_for_general_use
-    /// https://en.wikipedia.org/wiki/ISO/IEC_2022#Shift_functions
-    ss3: bool,
     csi_bracket: bool,
     osc_dispatch: bool,
 }
 
 pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
-    Performer { handler: h, ss3: false, csi_bracket: false, osc_dispatch: false }
+    Performer { handler: h, csi_bracket: false, osc_dispatch: false }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
     fn print(&mut self, c: char) {
-        if self.ss3 {
-            self.ss3 = false;
-            self.handler.ss3(c);
-        } else if self.csi_bracket {
+        if self.csi_bracket {
             self.csi_bracket = false;
             self.csi_dispatch(&Params::default(), &[], false, c);
         } else if c == '\x7F' {
@@ -111,13 +105,15 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
-        if b == b'O' {
-            self.ss3 = true;
-        } else if self.osc_dispatch && b == b'\\' {
+        if self.osc_dispatch && b == b'\\' {
             self.osc_dispatch = false;
         } else {
             self.handler.esc_dispatch(intermediates, ignore, b);
         }
+    }
+
+    fn ss3_dispatch(&mut self, param: u16, c: char) {
+        self.handler.ss3_dispatch(param, c);
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
@@ -146,11 +142,10 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x = Performer { handler: h, ss3: false, csi_bracket: false, osc_dispatch: false };
+        let mut x = Performer { handler: h, csi_bracket: false, osc_dispatch: false };
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
-        assert!(!x.ss3);
         assert!(!x.csi_bracket);
         assert!(!x.osc_dispatch);
     }
@@ -159,7 +154,7 @@ mod tests {
     fn test_ss3() {
         struct H(char);
         impl Handler for H {
-            fn ss3(&mut self, c: char) {
+            fn ss3_dispatch(&mut self, _param: u16, c: char) {
                 self.0 = c;
             }
         }
@@ -167,6 +162,10 @@ mod tests {
         // F1 on Mac / Windows terminal with ENABLE_VIRTUAL_TERMINAL_INPUT
         parse(&mut h, b"\x1BOA");
         assert_eq!('A', h.0);
+        // Alt-O
+        // parse(&mut h, b"\x1BO"); // FIXME
+        // [ss3] param=1 c=A
+        parse(&mut h, b"\x1BO1A");
     }
 
     #[test]
@@ -251,6 +250,39 @@ mod tests {
         // Mac / Linux console
         parse(&mut h, b"\x1B\x09");
         assert_eq!(0x09, h.0);
+    }
+
+    #[test]
+    fn csi() {
+        env_logger::init();
+        let mut h = super::Log;
+        // Shift-Space
+        // [csi_dispatch] params=[32;2] intermediates=, ignore=false, c=u
+        parse(&mut h, b"\x1B[32;2u");
+        // [csi_dispatch] params=[97;1:3] intermediates=, ignore=false, c=u
+        parse(&mut h, b"\x1b[97;1:3u");
+        // Mouse
+        // [csi_dispatch] params=[35;1;1] intermediates=<, ignore=false, c=m
+        parse(&mut h, b"\x1B[<35;1;1m");
+        // DSR
+        // [csi_dispatch] params=[997;1] intermediates=?, ignore=false, c=n
+        parse(&mut h, b"\x1B[?997;1n");
+        // [csi_dispatch] params=[0] intermediates=, ignore=false, c=n
+        parse(&mut h, b"\x1B[0n");
+        // FIXME [execute] b=\x1e
+        parse(&mut h, b"\x1B[11\x1E");
+        // FIXME
+        parse(&mut h, b"\x1B[3$");
+        // [csi_dispatch] params=[0] intermediates=, ignore=false, c=A
+        parse(&mut h, b"\x1B[A");
+        // [csi_dispatch] params=[1;5] intermediates=, ignore=false, c=p
+        parse(&mut h, b"\x1B[1;5p");
+        // [csi_dispatch] params=[2] intermediates=, ignore=false, c=~
+        parse(&mut h, b"\x1B[2~");
+        // [csi_dispatch] params=[2;2] intermediates=, ignore=false, c=~
+        parse(&mut h, b"\x1B[2;2~");
+        // [csi_dispatch] params=[200] intermediates=, ignore=false, c=~
+        parse(&mut h, b"\x1B[200~");
     }
 
     #[test]

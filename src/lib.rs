@@ -182,6 +182,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             State::EscapeIntermediate => self.advance_esc_intermediate(performer, byte),
             State::OscString => self.advance_osc_string(performer, byte),
             State::SosPmApcString => self.anywhere(performer, byte),
+            State::Ss3Entry => self.advance_ss3_entry(performer, byte),
             State::Ground => unreachable!(),
         }
     }
@@ -350,9 +351,13 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.action_collect(byte);
                 self.state = State::EscapeIntermediate
             },
-            0x30..=0x4F => {
+            0x30..0x4F => {
                 performer.esc_dispatch(self.intermediates(), self.ignoring, byte);
                 self.state = State::Ground
+            },
+            0x4F => {
+                self.reset_params();
+                self.state = State::Ss3Entry
             },
             0x50 => {
                 self.reset_params();
@@ -437,6 +442,18 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.action_osc_put_param()
             },
             _ => self.action_osc_put(byte),
+        }
+    }
+
+    #[inline(always)]
+    fn advance_ss3_entry<P: Perform>(&mut self, performer: &mut P, byte: u8) {
+        match byte {
+            0x00..=0x17 | 0x19 | 0x1C..=0x1F => performer.execute(byte),
+            0x30..=0x39 => {
+                self.action_paramnext(byte);
+            },
+            0x40..=0x7E => self.action_ss3_dispatch(performer, byte),
+            _ => self.anywhere(performer, byte),
         }
     }
 
@@ -555,6 +572,12 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             }
         }
         self.osc_raw.push(byte);
+    }
+
+    #[inline]
+    fn action_ss3_dispatch<P: Perform>(&mut self, performer: &mut P, byte: u8) {
+        performer.ss3_dispatch(self.param, byte as char);
+        self.state = State::Ground
     }
 
     fn osc_end<P: Perform>(&mut self, performer: &mut P, byte: u8) {
@@ -759,6 +782,7 @@ enum State {
     EscapeIntermediate,
     OscString,
     SosPmApcString,
+    Ss3Entry,
     #[default]
     Ground,
 }
@@ -825,6 +849,9 @@ pub trait Perform {
     /// The `ignore` flag indicates that more than two intermediates arrived and
     /// subsequent characters were ignored.
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
+
+    /// A final character has arrived for a SS3 sequence
+    fn ss3_dispatch(&mut self, _param: u16, _action: char) {}
 
     /// Whether the parser should terminate prematurely.
     ///
