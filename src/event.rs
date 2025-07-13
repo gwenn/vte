@@ -74,10 +74,11 @@ struct Performer<'h, H: Handler> {
     handler: &'h mut H,
     csi_bracket: bool,
     osc_dispatch: bool,
+    dcs_unhook: bool,
 }
 
 pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
-    Performer { handler: h, csi_bracket: false, osc_dispatch: false }
+    Performer { handler: h, csi_bracket: false, osc_dispatch: false, dcs_unhook: false }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
@@ -107,6 +108,8 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
         if self.osc_dispatch && b == b'\\' {
             self.osc_dispatch = false;
+        } else if self.dcs_unhook && b == b'\\' {
+            self.dcs_unhook = false;
         } else {
             self.handler.esc_dispatch(intermediates, ignore, b);
         }
@@ -132,6 +135,7 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn unhook(&mut self) {
+        self.dcs_unhook = true;
         self.handler.dcs_unhook()
     }
 }
@@ -142,12 +146,14 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x = Performer { handler: h, csi_bracket: false, osc_dispatch: false };
+        let mut x =
+            Performer { handler: h, csi_bracket: false, osc_dispatch: false, dcs_unhook: false };
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
         assert!(!x.csi_bracket);
         assert!(!x.osc_dispatch);
+        assert!(!x.dcs_unhook);
     }
 
     #[test]
@@ -254,7 +260,7 @@ mod tests {
 
     #[test]
     fn csi() {
-        env_logger::init();
+        // env_logger::init();
         let mut h = super::Log;
         // Shift-Space
         // [csi_dispatch] params=[32;2] intermediates=, ignore=false, c=u
@@ -301,7 +307,9 @@ mod tests {
     fn dcs() {
         // env_logger::init();
         let mut h = super::Log;
+        // XTGETTCAP
         parse(&mut h, b"\x1BP+q544e;524742;687061\x1B\\");
+        // XTVERSION
         parse(&mut h, b"\x1BP>|iTerm2[version]\x1B\\");
     }
 }
