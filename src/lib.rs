@@ -208,7 +208,8 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.action_param();
                 self.state = State::CsiParam
             },
-            0x3C..=0x3F => {
+            0x3C..=0x3F | 0x5B => {
+                // 0x5B for ESC [ [...
                 self.action_collect(byte);
                 self.state = State::CsiParam
             },

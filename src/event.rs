@@ -72,21 +72,17 @@ impl Handler for Log {
 /// Adapter from `crate::Perform` to `Handler`
 struct Performer<'h, H: Handler> {
     handler: &'h mut H,
-    csi_bracket: bool,
     osc_dispatch: bool,
     dcs_unhook: bool,
 }
 
 pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
-    Performer { handler: h, csi_bracket: false, osc_dispatch: false, dcs_unhook: false }
+    Performer { handler: h, osc_dispatch: false, dcs_unhook: false }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
     fn print(&mut self, c: char) {
-        if self.csi_bracket {
-            self.csi_bracket = false;
-            self.csi_dispatch(&Params::default(), &[], false, c);
-        } else if c == '\x7F' {
+        if c == '\x7F' {
             self.handler.execute(c as u8);
         } else {
             self.handler.print(c);
@@ -98,11 +94,7 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, c: char) {
-        if c == '[' /*&& params.is_empty()*/&& intermediates.is_empty() && !ignore {
-            self.csi_bracket = true;
-        } else {
-            self.handler.csi_dispatch(params, intermediates, ignore, c);
-        }
+        self.handler.csi_dispatch(params, intermediates, ignore, c);
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
@@ -146,12 +138,10 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x =
-            Performer { handler: h, csi_bracket: false, osc_dispatch: false, dcs_unhook: false };
+        let mut x = Performer { handler: h, osc_dispatch: false, dcs_unhook: false };
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
-        assert!(!x.csi_bracket);
         assert!(!x.osc_dispatch);
         assert!(!x.dcs_unhook);
     }
@@ -199,8 +189,8 @@ mod tests {
                 ignore: bool,
                 c: char,
             ) {
-                assert!(params.is_empty());
-                assert!(intermediates.is_empty());
+                assert_eq!(params.iter().next(), Some(&[0u16][..]));
+                assert_eq!(intermediates, b"[");
                 assert!(!ignore);
                 self.0 = c;
             }
@@ -277,7 +267,7 @@ mod tests {
         parse(&mut h, b"\x1B[0n");
         // FIXME [execute] b=\x1e
         parse(&mut h, b"\x1B[11\x1E");
-        // FIXME
+        // FIXME (rxvt)
         parse(&mut h, b"\x1B[3$");
         // [csi_dispatch] params=[0] intermediates=, ignore=false, c=A
         parse(&mut h, b"\x1B[A");
