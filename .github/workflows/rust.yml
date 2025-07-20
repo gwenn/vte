@@ -1,0 +1,40 @@
+name: Rust
+
+on:
+  push:
+    branches: [master, hack]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: short
+  RUSTFLAGS: -Cdebuginfo=1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cargo build --workspace --all-targets
+          cargo build --workspace --all-targets --all-features
+      - name: Run tests
+        run: |
+          cargo test --workspace --all-targets
+          cargo test --workspace --all-targets --all-features
+      - name: Clippy
+        run: cargo clippy --workspace --no-deps -- -D warnings
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Check with no default features
+        run: cargo check --workspace --no-default-features
+        env:
+          RUSTFLAGS: "-D warnings"
+      - name: Doc
+        run: cargo doc --all-features --no-deps
+        env: { RUSTDOCFLAGS: -Dwarnings }
