@@ -762,10 +762,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
     /// Returns if the state machine is in the ground state,
     /// i.e. there is no pending state held by the state machine.
     pub fn is_ground(&self) -> bool {
-        match self.state {
-            State::Ground => true,
-            _ => false,
-        }
+        self.state == State::Ground
     }
 }
 
