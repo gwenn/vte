@@ -74,11 +74,11 @@ struct Performer<'h, H: Handler> {
     handler: &'h mut H,
     osc_dispatch: bool,
     dcs_unhook: bool,
-    terminated: bool,
+    terminated: Cell<bool>,
 }
 
 pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
-    Performer { handler: h, osc_dispatch: false, dcs_unhook: false, terminated: false }
+    Performer { handler: h, osc_dispatch: false, dcs_unhook: false, terminated: Cell::new(false) }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
@@ -88,17 +88,17 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
         } else {
             self.handler.print(c);
         }
-        self.terminated = true;
+        self.terminated.set(true);
     }
 
     fn execute(&mut self, b: u8) {
         self.handler.execute(b);
-        self.terminated = true;
+        self.terminated.set(true);
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, c: char) {
         self.handler.csi_dispatch(params, intermediates, ignore, c);
-        self.terminated = true;
+        self.terminated.set(true);
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, b: u8) {
@@ -109,12 +109,12 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
         } else {
             self.handler.esc_dispatch(intermediates, ignore, b);
         }
-        self.terminated = true;
+        self.terminated.set(true);
     }
 
     fn ss3_dispatch(&mut self, param: u16, c: char) {
         self.handler.ss3_dispatch(param, c);
-        self.terminated = true;
+        self.terminated.set(true);
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
@@ -138,11 +138,13 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn terminated(&self) -> bool {
-        if self.terminated {
+        if self.terminated.get() {
             debug_assert!(!self.osc_dispatch);
             debug_assert!(!self.dcs_unhook);
+            self.terminated.set(false);
+            return true;
         }
-        self.terminated
+        false
     }
 }
 
@@ -152,11 +154,16 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x =
-            Performer { handler: h, osc_dispatch: false, dcs_unhook: false, terminated: false };
+        let mut x = Performer {
+            handler: h,
+            osc_dispatch: false,
+            dcs_unhook: false,
+            terminated: Cell::new(false),
+        };
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
+        assert!(x.terminated());
     }
 
     #[test]
