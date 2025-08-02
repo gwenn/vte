@@ -152,7 +152,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             i += self.advance_partial_utf8(performer, bytes);
         }
 
-        while i != bytes.len() && !performer.terminated() {
+        while !performer.terminated() && i != bytes.len() {
             match self.state {
                 State::Ground => i += self.advance_ground(performer, &bytes[i..]),
                 _ => {
@@ -861,7 +861,7 @@ pub trait Perform {
     /// This is checked after every parsed byte, so no expensive computation
     /// should take place in this function.
     #[inline(always)]
-    fn terminated(&self) -> bool {
+    fn terminated(&mut self) -> bool {
         false
     }
 }
