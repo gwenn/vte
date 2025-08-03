@@ -131,6 +131,8 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
         if !bell_terminated {
             self.osc_dispatch = true;
+        } else {
+            self.terminated = true;
         }
         self.handler.osc_dispatch(params, bell_terminated);
     }
