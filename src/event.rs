@@ -70,15 +70,26 @@ impl Handler for Log {
 }
 
 /// Adapter from `crate::Perform` to `Handler`
-struct Performer<'h, H: Handler> {
+pub struct Performer<'h, H: Handler> {
     handler: &'h mut H,
     osc_dispatch: bool,
     dcs_unhook: bool,
     terminated: bool,
 }
 
-pub fn new<'h, H: Handler>(h: &'h mut H) -> impl Perform + use<'h, H> {
+pub fn new<H: Handler>(h: &mut H) -> Performer<'_, H> {
     Performer { handler: h, osc_dispatch: false, dcs_unhook: false, terminated: false }
+}
+
+impl<H: Handler> Performer<'_, H> {
+    pub fn reset(&mut self) -> bool {
+        if self.terminated {
+            self.terminated = false;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl<'h, H: Handler> Perform for Performer<'h, H> {
@@ -137,11 +148,10 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
         self.handler.dcs_unhook();
     }
 
-    fn terminated(&mut self) -> bool {
+    fn terminated(&self) -> bool {
         if self.terminated {
             debug_assert!(!self.osc_dispatch);
             debug_assert!(!self.dcs_unhook);
-            self.terminated = false;
             return true;
         }
         false
@@ -154,12 +164,12 @@ mod tests {
     use crate::{Params, Parser};
 
     fn parse<H: Handler>(h: &mut H, bytes: &[u8]) {
-        let mut x =
-            Performer { handler: h, osc_dispatch: false, dcs_unhook: false, terminated: false };
+        let mut x = new(h);
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
-        assert!(x.terminated());
+        assert!(p.is_ground());
+        assert!(x.reset());
     }
 
     #[test]
