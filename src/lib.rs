@@ -244,6 +244,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
     fn advance_csi_param<P: Perform>(&mut self, performer: &mut P, byte: u8) {
         match byte {
             0x00..=0x17 | 0x19 | 0x1C..=0x1F => performer.execute(byte),
+            0x24 => self.action_csi_dispatch(performer, byte), // ETerm,xrvt,urxvt: $ = shift
             0x20..=0x2F => {
                 self.action_collect(byte);
                 self.state = State::CsiIntermediate

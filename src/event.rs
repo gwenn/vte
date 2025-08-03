@@ -129,10 +129,10 @@ impl<'h, H: Handler> Perform for Performer<'h, H> {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
-        if !bell_terminated {
-            self.osc_dispatch = true;
-        } else {
+        if bell_terminated {
             self.terminated = true;
+        } else {
+            self.osc_dispatch = true;
         }
         self.handler.osc_dispatch(params, bell_terminated);
     }
@@ -294,8 +294,8 @@ mod tests {
         // [csi_dispatch] params=[0] intermediates=, ignore=false, c=n
         parse(&mut h, b"\x1B[0n");
         // FIXME [execute] b=\x1e
-        parse(&mut h, b"\x1B[11\x1E");
-        // FIXME (rxvt)
+        // parse(&mut h, b"\x1B[11\x1E");
+        // [csi_dispatch] params=[3] intermediates=, ignore=false, c=$ (rxvt)
         parse(&mut h, b"\x1B[3$");
         // [csi_dispatch] params=[0] intermediates=, ignore=false, c=A
         parse(&mut h, b"\x1B[A");
