@@ -19,6 +19,294 @@ pub trait Handler {
     fn dcs_unhook(&mut self) {}
 }
 
+bitflags::bitflags! {
+    /// The set of modifier keys that were triggered along with a key press.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Modifiers: u8 {
+        /// Control modifier
+        const CTRL  = 1<<3;
+        /// Escape or Alt modifier (Meta/Opt)
+        const ALT  = 1<<2;
+        /// Shift modifier
+        const SHIFT = 1<<1;
+        /// Super modifier (Cmd/Win)
+        const SUPER = 1<<4;
+
+        /// No modifier
+        const NONE = 0;
+        /// Ctrl + Shift
+        const CTRL_SHIFT = Self::CTRL.bits() | Self::SHIFT.bits();
+        /// Alt + Shift
+        const ALT_SHIFT = Self::ALT.bits() | Self::SHIFT.bits();
+        /// Ctrl + Alt
+        const CTRL_ALT = Self::CTRL.bits() | Self::ALT.bits();
+        /// Ctrl + Alt + Shift
+        const CTRL_ALT_SHIFT = Self::CTRL.bits() | Self::ALT.bits() | Self::SHIFT.bits();
+    }
+}
+
+/// Input key pressed
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum KeyCode {
+    /// Unsupported escape sequence (on unix platform)
+    UnknownEscSeq,
+    /// ⌫ or Ctrl-H
+    Backspace,
+    /// ⇤ (usually Shift-Tab)
+    BackTab,
+    /// Paste (on unix platform)
+    BracketedPasteStart,
+    /// Paste (on unix platform)
+    BracketedPasteEnd,
+    /// Single char
+    Char(char),
+    /// ⌦
+    Delete,
+    /// ↓ arrow key
+    Down,
+    /// ⇲
+    End,
+    /// ↵ or Ctrl-M
+    Enter,
+    /// Escape or Ctrl-[
+    Esc,
+    /// Function key
+    F(u8),
+    /// ⇱
+    Home,
+    /// Insert key
+    Insert,
+    /// ← arrow key
+    Left,
+    /// \0
+    Null,
+    /// ⇟
+    PageDown,
+    /// ⇞
+    PageUp,
+    /// → arrow key
+    Right,
+    /// ⇥ or Ctrl-I
+    Tab,
+    /// ↑ arrow key
+    Up,
+    // TODO CapsLock,Menu,NumLock,Pause,PrintScreen,ScrollLock
+}
+
+pub struct EventHandler {
+    pub key: KeyCode,
+    pub modifiers: Modifiers,
+    // TODO state: keypad | num_lock | caps_lock
+}
+
+// TODO
+// - Alt-O (\x1BO)
+// - Alt-P (\x1BP)
+// - ESC ESC... => Alt- ...
+impl Handler for EventHandler {
+    fn ss3_dispatch(&mut self, param: u16, c: char) {
+        let ss3_m = |param: u16| match param {
+            5 => Modifiers::SHIFT,
+            _ => Modifiers::NONE,
+        };
+        let ss3_f = |param: u16| match param {
+            0 => 0,
+            2 | 12 => 12,
+            3 | 13 => 48,
+            4 | 14 => 60,
+            5 | 15 => 24,
+            6 | 16 => 36,
+            _ => 0,
+        };
+        match c {
+            'A' => self.key = KeyCode::Up,
+            'B' => self.key = KeyCode::Down,
+            'C' => (self.key, self.modifiers) = (KeyCode::Right, ss3_m(param)),
+            'D' => (self.key, self.modifiers) = (KeyCode::Left, ss3_m(param)),
+            //'E' => self.key = KeyCode::Home, // kbeg,kb2
+            'F' => self.key = KeyCode::End,
+            'M' => self.key = KeyCode::Enter,
+            'H' => self.key = KeyCode::Home,
+            'P' => self.key = KeyCode::F(1 + ss3_f(param)),
+            'Q' => self.key = KeyCode::F(2 + ss3_f(param)),
+            'R' => self.key = KeyCode::F(3 + ss3_f(param)),
+            'S' => self.key = KeyCode::F(4 + ss3_f(param)),
+            'T' | 't' => self.key = KeyCode::F(5),
+            'U' => self.key = KeyCode::F(6),
+            'V' | 'v' => self.key = KeyCode::F(7),
+            'W' | 'l' => self.key = KeyCode::F(8),
+            'X' => self.key = KeyCode::F(9),
+            'Y' | 'x' => self.key = KeyCode::F(10),
+            'a' => (self.key, self.modifiers) = (KeyCode::Up, Modifiers::CTRL),
+            'b' => (self.key, self.modifiers) = (KeyCode::Down, Modifiers::CTRL),
+            'c' => (self.key, self.modifiers) = (KeyCode::Right, Modifiers::CTRL),
+            'd' => (self.key, self.modifiers) = (KeyCode::Left, Modifiers::CTRL),
+            'n' => self.key = KeyCode::Delete, // kc3
+            'p' => self.key = KeyCode::Insert, // kc1
+            'q' => self.key = KeyCode::End,    // ka1,kc1*
+            //'r' => self.key = KeyCode::Char('5'), // kb2
+            's' => self.key = KeyCode::PageDown, // ka3,kc3*
+            //'u' => self.key = KeyCode::, // kbeg,kb2*,kf6
+            'w' => self.key = KeyCode::Home,   // ka1*,kf9
+            'y' => self.key = KeyCode::PageUp, // ka3*,kf0
+            _ => {},
+        };
+    }
+
+    fn print(&mut self, c: char) {
+        self.key = KeyCode::Char(c)
+    }
+
+    fn execute(&mut self, b: u8) {
+        (self.key, self.modifiers) = match b {
+            b'\x00' => (KeyCode::Char('@'), Modifiers::CTRL), // '\0'
+            b'\x01' => (KeyCode::Char('A'), Modifiers::CTRL),
+            b'\x02' => (KeyCode::Char('B'), Modifiers::CTRL),
+            b'\x03' => (KeyCode::Char('C'), Modifiers::CTRL),
+            b'\x04' => (KeyCode::Char('D'), Modifiers::CTRL),
+            b'\x05' => (KeyCode::Char('E'), Modifiers::CTRL),
+            b'\x06' => (KeyCode::Char('F'), Modifiers::CTRL),
+            b'\x07' => (KeyCode::Char('G'), Modifiers::CTRL), // '\a',bel
+            b'\x08' => (KeyCode::Backspace, Modifiers::NONE), // '\b',kbs
+            b'\x09' => (KeyCode::Tab, Modifiers::NONE),       // '\t',ht
+            b'\x0a' => (KeyCode::Char('J'), Modifiers::CTRL), // '\n' (10)
+            b'\x0b' => (KeyCode::Char('K'), Modifiers::CTRL),
+            b'\x0c' => (KeyCode::Char('L'), Modifiers::CTRL), // clear
+            b'\x0d' => (KeyCode::Enter, Modifiers::NONE),     // '\r' (13),cr
+            b'\x0e' => (KeyCode::Char('N'), Modifiers::CTRL),
+            b'\x0f' => (KeyCode::Char('O'), Modifiers::CTRL),
+            b'\x10' => (KeyCode::Char('P'), Modifiers::CTRL),
+            b'\x11' => (KeyCode::Char('Q'), Modifiers::CTRL),
+            b'\x12' => (KeyCode::Char('R'), Modifiers::CTRL),
+            b'\x13' => (KeyCode::Char('S'), Modifiers::CTRL),
+            b'\x14' => (KeyCode::Char('T'), Modifiers::CTRL),
+            b'\x15' => (KeyCode::Char('U'), Modifiers::CTRL),
+            b'\x16' => (KeyCode::Char('V'), Modifiers::CTRL),
+            b'\x17' => (KeyCode::Char('W'), Modifiers::CTRL),
+            b'\x18' => (KeyCode::Char('X'), Modifiers::CTRL),
+            b'\x19' => (KeyCode::Char('Y'), Modifiers::CTRL),
+            b'\x1a' => (KeyCode::Char('Z'), Modifiers::CTRL), // kspd
+            b'\x1b' => (KeyCode::Esc, Modifiers::NONE),       // Ctrl-[, '\e'
+            b'\x1c' => (KeyCode::Char('\\'), Modifiers::CTRL),
+            b'\x1d' => (KeyCode::Char(']'), Modifiers::CTRL),
+            b'\x1e' => (KeyCode::Char('^'), Modifiers::CTRL),
+            b'\x1f' => (KeyCode::Char('_'), Modifiers::CTRL),
+            b'\x7f' => (KeyCode::Backspace, Modifiers::NONE), // Rubout, Ctrl-?,kbs
+            _ => (KeyCode::Null, Modifiers::NONE),
+        };
+    }
+
+    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, b: u8) {
+        if b.is_ascii_control() {
+            self.execute(b);
+        } else if b.is_ascii_alphanumeric() {
+            self.key = KeyCode::Char(b as char);
+        }
+        self.modifiers |= Modifiers::ALT;
+    }
+
+    fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, c: char) {
+        fn csi_m(params: &Params) -> Modifiers {
+            let mut params_iter = params.iter();
+            let mut next_param_or = |default: u16| match params_iter.next() {
+                Some(&[param, ..]) if param != 0 => param,
+                _ => default,
+            };
+            let _ = next_param_or(1);
+            match next_param_or(1) {
+                2 => Modifiers::SHIFT,
+                3 => Modifiers::ALT,
+                4 => Modifiers::ALT_SHIFT,
+                5 => Modifiers::CTRL,
+                6 => Modifiers::CTRL_SHIFT,
+                7 => Modifiers::CTRL_ALT,
+                8 => Modifiers::CTRL_ALT_SHIFT,
+                _ => Modifiers::NONE,
+            }
+        }
+        fn csi_f(params: &Params) -> u8 {
+            let mut params_iter = params.iter();
+            let mut next_param_or = |default: u16| match params_iter.next() {
+                Some(&[param, ..]) if param != 0 => param,
+                _ => default,
+            };
+            let _ = next_param_or(1);
+            match next_param_or(1) {
+                2 => 12,
+                5 => 24,
+                6 => 36,
+                3 => 48,
+                4 => 60,
+                _ => 3,
+            }
+        }
+        match c {
+            'A' => {
+                if intermediates == &[b'['] {
+                    (self.key, self.modifiers) = (KeyCode::F(1), Modifiers::NONE)
+                } else {
+                    (self.key, self.modifiers) = (KeyCode::Up, csi_m(params)) // kcuu1,kri
+                }
+            },
+            'B' => {
+                if intermediates == &[b'['] {
+                    (self.key, self.modifiers) = (KeyCode::F(2), Modifiers::NONE)
+                } else {
+                    (self.key, self.modifiers) = (KeyCode::Down, csi_m(params)) // kcud1,kind
+                }
+            },
+            'C' => {
+                if intermediates == &[b'['] {
+                    (self.key, self.modifiers) = (KeyCode::F(3), Modifiers::NONE)
+                } else {
+                    (self.key, self.modifiers) = (KeyCode::Right, csi_m(params))
+                    // kcuf1,kRIT
+                }
+            },
+            'D' => {
+                if intermediates == &[b'['] {
+                    (self.key, self.modifiers) = (KeyCode::F(4), Modifiers::NONE)
+                } else {
+                    (self.key, self.modifiers) = (KeyCode::Left, csi_m(params)) // kcub1,kLFT
+                }
+            },
+            'E' => {
+                if intermediates == &[b'['] {
+                    (self.key, self.modifiers) = (KeyCode::F(5), Modifiers::NONE)
+                } else {
+                    (self.key, self.modifiers) = (KeyCode::Home, csi_m(params)) // kb2,kbeg,kBEG
+                }
+            },
+            'F' => (self.key, self.modifiers) = (KeyCode::End, csi_m(params)), // kend,kEND
+            'H' => (self.key, self.modifiers) = (KeyCode::Home, csi_m(params)), // khome,kHOM
+            'I' => (self.key, self.modifiers) = (KeyCode::PageUp, Modifiers::NONE), // kpp
+            'L' => (self.key, self.modifiers) = (KeyCode::Insert, Modifiers::NONE), // kich1
+            'M' => (self.key, self.modifiers) = (KeyCode::F(1), Modifiers::NONE), // kf1
+            'N' => (self.key, self.modifiers) = (KeyCode::F(2), Modifiers::NONE), // kf2
+            'O' => (self.key, self.modifiers) = (KeyCode::F(3), Modifiers::NONE), // kf3
+            'P' => (self.key, self.modifiers) = (KeyCode::F(1 + csi_f(params)), Modifiers::NONE), /* kf4 */
+            'Q' => (self.key, self.modifiers) = (KeyCode::F(2 + csi_f(params)), Modifiers::NONE), /* kf5 */
+            'R' => (self.key, self.modifiers) = (KeyCode::F(3 + csi_f(params)), Modifiers::NONE), /* kf6 */
+            'S' => (self.key, self.modifiers) = (KeyCode::F(4 + csi_f(params)), Modifiers::NONE), /* kf7 */
+            'T' => (self.key, self.modifiers) = (KeyCode::F(8), Modifiers::NONE), // kf8
+            'U' => (self.key, self.modifiers) = (KeyCode::PageDown, Modifiers::NONE), // kf9,knp
+            'V' => (self.key, self.modifiers) = (KeyCode::PageUp, Modifiers::NONE), // kf10,kpp
+            'W' => (self.key, self.modifiers) = (KeyCode::F(11), Modifiers::NONE), // kf11
+            'X' => (self.key, self.modifiers) = (KeyCode::F(12), Modifiers::NONE), // kf12
+            'Y' => (self.key, self.modifiers) = (KeyCode::End, Modifiers::NONE),  // kend,kf13
+            'Z' => (self.key, self.modifiers) = (KeyCode::BackTab, Modifiers::NONE), // kcbt,kf14
+            'a' => (self.key, self.modifiers) = (KeyCode::Up, Modifiers::SHIFT),  // kind,kf15
+            'b' => (self.key, self.modifiers) = (KeyCode::Down, Modifiers::SHIFT), // kri,kf16
+            'c' if intermediates.is_empty() => {
+                (self.key, self.modifiers) = (KeyCode::Right, Modifiers::SHIFT)
+            }, // kRIT,kf17
+            'd' => (self.key, self.modifiers) = (KeyCode::Left, Modifiers::SHIFT), // kLFT,kf18
+            _ => {},
+        };
+    }
+}
+
 #[cfg(feature = "log")]
 pub struct Log;
 #[cfg(feature = "log")]
