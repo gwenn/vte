@@ -243,21 +243,21 @@ impl Handler for EventHandler {
         }
         match c {
             'A' => {
-                if intermediates == &[b'['] {
+                if intermediates == b"[" {
                     (self.key, self.modifiers) = (KeyCode::F(1), Modifiers::NONE)
                 } else {
                     (self.key, self.modifiers) = (KeyCode::Up, csi_m(params)) // kcuu1,kri
                 }
             },
             'B' => {
-                if intermediates == &[b'['] {
+                if intermediates == b"[" {
                     (self.key, self.modifiers) = (KeyCode::F(2), Modifiers::NONE)
                 } else {
                     (self.key, self.modifiers) = (KeyCode::Down, csi_m(params)) // kcud1,kind
                 }
             },
             'C' => {
-                if intermediates == &[b'['] {
+                if intermediates == b"[" {
                     (self.key, self.modifiers) = (KeyCode::F(3), Modifiers::NONE)
                 } else {
                     (self.key, self.modifiers) = (KeyCode::Right, csi_m(params))
@@ -265,14 +265,14 @@ impl Handler for EventHandler {
                 }
             },
             'D' => {
-                if intermediates == &[b'['] {
+                if intermediates == b"[" {
                     (self.key, self.modifiers) = (KeyCode::F(4), Modifiers::NONE)
                 } else {
                     (self.key, self.modifiers) = (KeyCode::Left, csi_m(params)) // kcub1,kLFT
                 }
             },
             'E' => {
-                if intermediates == &[b'['] {
+                if intermediates == b"[" {
                     (self.key, self.modifiers) = (KeyCode::F(5), Modifiers::NONE)
                 } else {
                     (self.key, self.modifiers) = (KeyCode::Home, csi_m(params)) // kb2,kbeg,kBEG
@@ -458,7 +458,10 @@ mod tests {
         let mut p = Parser::new();
         let n = p.advance_until_terminated(&mut x, bytes);
         assert_eq!(n, bytes.len());
-        assert!(p.is_ground());
+        if !p.is_ground() {
+            p.timeout(&mut x);
+            assert!(p.is_ground());
+        }
         assert!(x.reset());
     }
 
@@ -475,7 +478,7 @@ mod tests {
         parse(&mut h, b"\x1BOA");
         assert_eq!('A', h.0);
         // Alt-O
-        // parse(&mut h, b"\x1BO"); // FIXME
+        parse(&mut h, b"\x1BO");
         // [ss3] param=1 c=A
         parse(&mut h, b"\x1BO1A");
     }

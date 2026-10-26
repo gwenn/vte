@@ -768,8 +768,41 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
 
     /// Returns if the state machine is in the ground state,
     /// i.e. there is no pending state held by the state machine.
-    pub fn is_ground(&self) -> bool {
+    #[cfg(feature = "event")]
+    pub(crate) fn is_ground(&self) -> bool {
         self.state == State::Ground
+    }
+
+    #[cfg(feature = "event")]
+    pub(crate) fn timeout<P: Perform>(&mut self, performer: &mut P) {
+        match self.state {
+            State::CsiEntry => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, b'[');
+                self.state = State::Ground
+            },
+            State::DcsEntry => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, b'P');
+                self.state = State::Ground
+            },
+            State::Escape => {
+                performer.execute(b'\x1B');
+                self.state = State::Ground
+            },
+            State::EscapeIntermediate => todo!(),
+            State::OscString => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, b']');
+                self.state = State::Ground
+            },
+            State::SosPmApcString => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, b'X');
+                self.state = State::Ground
+            },
+            State::Ss3Entry => {
+                performer.esc_dispatch(self.intermediates(), self.ignoring, b'O');
+                self.state = State::Ground
+            },
+            _ => {},
+        };
     }
 }
 
