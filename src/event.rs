@@ -575,21 +575,56 @@ mod tests {
         // [csi_dispatch] params=[32;2] intermediates=, ignore=false, c=u
         parse(&mut h, b"\x1B[32;2u");
         // [csi_dispatch] params=[97;1:3] intermediates=, ignore=false, c=u
-        parse(&mut h, b"\x1b[97;1:3u");
+        parse(&mut h, b"\x1B[97;1:3u");
+        // [csi_dispatch] params=[97:65;2] intermediates=, ignore=false, c=u
+        parse(&mut h, b"\x1B[97:65;2u");
+        // [csi_dispatch] params=[97] intermediates=, ignore=false, c=u
+        parse(&mut h, b"\x1B[97u");
+        // [csi_dispatch] params=[32] intermediates=, ignore=false, c=m
+        parse(&mut h, b"\x1B[32m");
+        // [csi_dispatch] params=[0] intermediates=, ignore=false, c=m
+        parse(&mut h, b"\x1B[m");
+        // [csi_dispatch] params=[38;2;80;100;120;48;2;80;100;120]
+        // intermediates=, ignore=false, c=m
+        parse(&mut h, b"\x1b[38;2;80;100;120;48;2;80;100;120m");
+        // [csi_dispatch] params=[58:2:0:80:100:120;4:3] intermediates=,
+        // ignore=false, c=m
+        parse(&mut h, b"\x1b[58:2::80:100:120;4:3m");
         // Mouse
         // [csi_dispatch] params=[35;1;1] intermediates=<, ignore=false, c=m
         parse(&mut h, b"\x1B[<35;1;1m");
+        // [csi_dispatch] params=[0;4;3] intermediates=<, ignore=false, c=M
+        parse(&mut h, b"\x1B[<0;4;3M");
+        // [csi_dispatch] params=[0] intermediates=, ignore=false, c=M
+        // FIXME parse(&mut h, b"\x1b[M\x20\x21\x21");
+        // FIXME parse(&mut h, b"\x1b[<35;-50;-100m");
         // DSR
         // [csi_dispatch] params=[997;1] intermediates=?, ignore=false, c=n
         parse(&mut h, b"\x1B[?997;1n");
+        // [csi_dispatch] params=[0] intermediates=?, ignore=false, c=c
+        parse(&mut h, b"\x1B[?c");
+        // [csi_dispatch] params=[1016;1] intermediates=?, ignore=false, c=$
+        // FIXME parse(&mut h, b"\x1B[?1016;1$y");
+        // FIXME parse(&mut h, b"\x1B[?1016;0$y");
+        // FIXME parse(&mut h, b"\x1b[?2026;1$y");
+        parse(&mut h, b"\x1B[?1049h");
+        parse(&mut h, b"\x1B[?1049l");
         // [csi_dispatch] params=[0] intermediates=, ignore=false, c=n
         parse(&mut h, b"\x1B[0n");
+        // [csi_dispatch] params=[0] intermediates= , ignore=false, c=q
+        parse(&mut h, b"\x1b[0 q");
+        // [csi_dispatch] params=[22;0] intermediates=, ignore=false, c=t
+        parse(&mut h, b"\x1b[22;0t");
         // FIXME [execute] b=\x1e
         // parse(&mut h, b"\x1B[11\x1E");
         // [csi_dispatch] params=[3] intermediates=, ignore=false, c=$ (rxvt)
         parse(&mut h, b"\x1B[3$");
         // [csi_dispatch] params=[0] intermediates=, ignore=false, c=A
         parse(&mut h, b"\x1B[A");
+        // [csi_dispatch] params=[1;6:2] intermediates=, ignore=false, c=C
+        parse(&mut h, b"\x1B[1;6:2C");
+        // [csi_dispatch] params=[12;300] intermediates=, ignore=false, c=R
+        parse(&mut h, b"\x1B[12;300R");
         // [csi_dispatch] params=[1;5] intermediates=, ignore=false, c=p
         parse(&mut h, b"\x1B[1;5p");
         // [csi_dispatch] params=[2] intermediates=, ignore=false, c=~
@@ -598,6 +633,13 @@ mod tests {
         parse(&mut h, b"\x1B[2;2~");
         // [csi_dispatch] params=[200] intermediates=, ignore=false, c=~
         parse(&mut h, b"\x1B[200~");
+        // Cursor shape query response
+        // [csi_dispatch] params=[1;2;3;29;30;40;100;101] intermediates=> ,
+        // ignore=false, c=q
+        parse(&mut h, b"\x1B[>1;2;3;29;30;40;100;101 q");
+        // Query cursor shape
+        // [csi_dispatch] params=[0] intermediates=> , ignore=false, c=q
+        parse(&mut h, b"\x1B[> q");
     }
 
     #[test]
@@ -606,9 +648,13 @@ mod tests {
         let mut h = super::Log;
         parse(&mut h, b"\x1B]4;2;#ff0000\x1B\\");
         parse(&mut h, b"\x1B]4;-2;rgb:[red]/[green]/[blue]\x1B\\");
+        // Change dynamic colors
+        parse(&mut h, b"\x1b]11;rgb:2828/2828/2828\x1b\\");
+        parse(&mut h, b"\x1b]11;rgb:2828/2828/2828\x07");
         parse(&mut h, b"\x1B]10;#ff0000\x1B\\");
         parse(&mut h, b"\x1B]52;c;b3NjNTIgcGFzdGU=\x1B\\");
         parse(&mut h, b"\x1B]52;c;\x07");
+        parse(&mut h, b"\x1b]11;?\x1b\\");
     }
 
     // RUST_LOG=vte=info cargo test -- --nocapture event::tests::dcs
@@ -620,5 +666,11 @@ mod tests {
         parse(&mut h, b"\x1BP+q544e;524742;687061\x1B\\");
         // XTVERSION
         parse(&mut h, b"\x1BP>|iTerm2[version]\x1B\\");
+        // Graphic Rendition
+        parse(&mut h, b"\x1bP0$r0;4;5;7m\x1b\\");
+        parse(&mut h, b"\x1bP1$r4:3m\x1b\\");
+        parse(&mut h, b"\x1bP$qm\x1b\\");
+        // Cursor style request
+        parse(&mut h, b"\x1bP$q q\x1b\\");
     }
 }
